@@ -23,8 +23,6 @@ app.get('/sse', async (req, res) => {
   const sessionId = Math.random().toString(36).substring(7);
   
   try {
-    // FIX CRUCIAL : On génère le serveur MCP à l'intérieur de la route 
-    // pour que chaque session de Claude ait son espace dédié sans conflit.
     const server = new Server(
       { name: 'pappers-mcp', version: '1.0.0' },
       { capabilities: { tools: {} } }
@@ -61,8 +59,10 @@ app.get('/sse', async (req, res) => {
     });
 
     const host = req.get('host');
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-    const baseUrl = `${protocol}://${host}`;
+    
+    // CORRECTIF SÉCURITÉ : On force le HTTPS car Render est toujours sécurisé de l'extérieur.
+    // Cela empêche Claude de bloquer la requête.
+    const baseUrl = `https://${host}`;
     
     const transport = new SSEServerTransport(`${baseUrl}/messages?id=${sessionId}`, res);
     transports.set(sessionId, transport);
@@ -73,7 +73,6 @@ app.get('/sse', async (req, res) => {
 
     await server.connect(transport);
   } catch (error) {
-    // FIX LOGS : On n'affiche que le message textuel pour stopper l'inondation de l'écran
     console.error("Erreur connexion MCP :", error.message || error);
     if (!res.headersSent) {
       res.status(500).send("Erreur de connexion MCP");
@@ -95,13 +94,10 @@ app.post('/messages', async (req, res) => {
   }
 });
 
-// Ajout d'une vraie page d'accueil pour éviter le message "Not Found" ou "Cannot GET"
 app.get('/', (req, res) => {
   res.send("Le serveur MCP Pappers est en ligne ! Connectez Claude à l'adresse /sse.");
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`MCP open on port ${PORT}`));
-
-
 
